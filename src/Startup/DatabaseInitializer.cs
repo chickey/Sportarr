@@ -284,6 +284,33 @@ public static class DatabaseInitializer
             Console.WriteLine($"[Sportarr] Warning: Could not create UX_ChannelLeagueMappings_PreferredPerLeague index: {ex.Message}");
         }
 
+        // De-duplicate EventFiles that point at the same physical path, then enforce one
+        // EventFile row per path. Renumber/rename races and the (now fixed) recycle-bin
+        // re-pointing could leave two rows for the same file, or two events both claiming the
+        // same race. Keep the lowest Id per path; the next disk scan reconciles HasFile flags.
+        // Dedupe MUST run before the unique index is created or creation fails.
+        try
+        {
+            var removed = db.Database.ExecuteSqlRaw(
+                "DELETE FROM \"EventFiles\" WHERE \"Id\" NOT IN (" +
+                "  SELECT MIN(\"Id\") FROM \"EventFiles\" " +
+                "  WHERE \"FilePath\" IS NOT NULL AND \"FilePath\" != '' " +
+                "  GROUP BY \"FilePath\"" +
+                ") AND \"FilePath\" IS NOT NULL AND \"FilePath\" != ''");
+            if (removed > 0)
+            {
+                Console.WriteLine($"[Sportarr] Removed {removed} duplicate EventFile row(s) sharing a file path");
+            }
+
+            db.Database.ExecuteSqlRaw(
+                "CREATE UNIQUE INDEX IF NOT EXISTS \"UX_EventFiles_FilePath\" " +
+                "ON \"EventFiles\" (\"FilePath\") WHERE \"FilePath\" IS NOT NULL AND \"FilePath\" != ''");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Sportarr] Warning: Could not dedupe/enforce EventFiles.FilePath uniqueness: {ex.Message}");
+        }
+
         // Phase 1 scored-mapping columns. Same legacy-DB safety-net pattern
         // — EF projects these in every channel-mapping query so a legacy
         // database without them crashes the IPTV settings page on load.
@@ -432,6 +459,33 @@ public static class DatabaseInitializer
         catch (Exception ex)
         {
             Console.WriteLine($"[Sportarr] Warning: Could not normalize Leagues.Sport casing: {ex.Message}");
+        }
+
+        // Heal the sport name for installs that added motorsport leagues
+        // while the metadata API still labelled the sport "Racing". The hub
+        // now ships TheSportsDB's "Motorsport" spelling (the canonical sport
+        // was renamed Racing -> Motorsport); a fresh sync would update these
+        // rows eventually, but rewriting them at startup makes the chip and
+        // detail pages read "Motorsport" immediately instead of showing a
+        // stale "Racing" until the next refresh. Runtime classification
+        // already treats both spellings as motorsport (LeagueSportRules.
+        // IsMotorsport), so this is purely a display/normalization pass.
+        // Idempotent: the COLLATE NOCASE match only touches rows that differ.
+        try
+        {
+            foreach (var table in new[] { "Leagues", "Events", "Teams" })
+            {
+                var rowsAffected = db.Database.ExecuteSqlRaw(
+                    $"UPDATE {table} SET Sport = 'Motorsport' WHERE Sport = 'Racing' COLLATE NOCASE");
+                if (rowsAffected > 0)
+                {
+                    Console.WriteLine($"[Sportarr] Renamed {rowsAffected} {table}.Sport row(s) from 'Racing' to 'Motorsport'");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Sportarr] Warning: Could not normalize Racing -> Motorsport sport name: {ex.Message}");
         }
 
         // Ensure the plain-RSS indexer columns exist on Indexers. Added so
@@ -2006,6 +2060,7 @@ public static class DatabaseInitializer
         EnsureColumn(db, "EventFiles", "Languages", "TEXT NOT NULL DEFAULT '[]'");
         EnsureColumn(db, "EventFiles", "ReleaseGroup", "TEXT");
         EnsureColumn(db, "MediaManagementSettings", "UserRejectedExtensions", "TEXT");
+        EnsureColumn(db, "Events", "Description", "TEXT");
 
         RelaxLegacyRootFolderColumns(db);
     }

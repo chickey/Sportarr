@@ -7,12 +7,26 @@
 # Settings -> Metadata Agents -> Add Provider -> https://sportarr.net/plex
 #
 
-SPORTARR_API_URL = 'https://sportarr.net'
+DEFAULT_API_URL = 'https://sportarr.net'
+
+
+def get_api_url():
+    # Read the configured Sportarr API URL from plugin prefs so users can
+    # point the agent at a local Sportarr instance instead of sportarr.net.
+    # Prefs is only available after the framework loads, so this is read at
+    # call time rather than at import.
+    try:
+        configured = Prefs['api_url']
+        if configured:
+            return configured.rstrip('/')
+    except Exception:
+        pass
+    return DEFAULT_API_URL
 
 
 def Start():
     Log.Info("[Sportarr-Legacy] Agent starting...")
-    Log.Info("[Sportarr-Legacy] API URL: %s" % SPORTARR_API_URL)
+    Log.Info("[Sportarr-Legacy] API URL: %s" % get_api_url())
     Log.Info("[Sportarr-Legacy] Note: For Plex 1.43.0+, consider using the new Custom Metadata Provider")
     # No bundle-level HTTP cache. Sportarr-hub is the source of truth for
     # episode lists, titles, and posters; cancellations, merges, and
@@ -34,7 +48,7 @@ class SportarrAgent(Agent.TV_Shows):
 
         try:
             search_url = "%s/api/metadata/agents/search?title=%s" % (
-                SPORTARR_API_URL,
+                get_api_url(),
                 String.Quote(media.show, usePlus=True)
             )
 
@@ -74,7 +88,7 @@ class SportarrAgent(Agent.TV_Shows):
         Log.Info("[Sportarr-Legacy] Updating metadata for ID: %s" % metadata.id)
 
         try:
-            series_url = "%s/api/metadata/agents/series/%s" % (SPORTARR_API_URL, metadata.id)
+            series_url = "%s/api/metadata/agents/series/%s" % (get_api_url(), metadata.id)
             Log.Debug("[Sportarr-Legacy] Series URL: %s" % series_url)
             series = JSON.ObjectFromURL(series_url, cacheTime=0)
 
@@ -120,7 +134,7 @@ class SportarrAgent(Agent.TV_Shows):
                     except Exception as e:
                         Log.Warn("[Sportarr-Legacy] Failed to fetch fanart: %s" % e)
 
-            seasons_url = "%s/api/metadata/agents/series/%s/seasons" % (SPORTARR_API_URL, metadata.id)
+            seasons_url = "%s/api/metadata/agents/series/%s/seasons" % (get_api_url(), metadata.id)
             Log.Debug("[Sportarr-Legacy] Seasons URL: %s" % seasons_url)
             seasons_response = JSON.ObjectFromURL(seasons_url, cacheTime=0)
 
@@ -148,45 +162,54 @@ class SportarrAgent(Agent.TV_Shows):
     def update_episodes(self, metadata, media, season_num):
         Log.Debug("[Sportarr-Legacy] Updating episodes for season %s" % season_num)
 
-        try:
-            episodes_url = "%s/api/metadata/agents/series/%s/season/%s/episodes" % (
-                SPORTARR_API_URL, metadata.id, season_num
-            )
-            Log.Debug("[Sportarr-Legacy] Episodes URL: %s" % episodes_url)
-            episodes_response = JSON.ObjectFromURL(episodes_url, cacheTime=0)
+        # Resolve each episode the library actually has via /match instead of
+        # pulling the whole season list. A season can hold hundreds or
+        # thousands of events; the user typically has a handful of files, so
+        # one small /match per file is far cheaper than fetching every event.
+        # Server-side numbering guarantees /match returns the event this
+        # episode number maps to.
+        for ep_num in media.seasons[season_num].episodes:
+            try:
+                match_url = "%s/api/metadata/match?series=%s&season=%s&episode=%s" % (
+                    get_api_url(), metadata.id, season_num, ep_num
+                )
+                Log.Debug("[Sportarr-Legacy] Match URL: %s" % match_url)
+                match_response = JSON.ObjectFromURL(match_url, cacheTime=0)
 
-            if 'episodes' in episodes_response:
-                for ep_data in episodes_response['episodes']:
-                    ep_num = ep_data.get('episode_number')
+                ep_data = None
+                if match_response and 'match' in match_response and match_response['match']:
+                    ep_data = match_response['match'].get('episode')
 
-                    if ep_num in media.seasons[season_num].episodes:
-                        episode = metadata.seasons[season_num].episodes[ep_num]
+                if not ep_data:
+                    continue
 
-                        title = ep_data.get('title', "Episode %s" % ep_num)
-                        if ep_data.get('part_name'):
-                            title = "%s - %s" % (title, ep_data['part_name'])
+                episode = metadata.seasons[season_num].episodes[ep_num]
 
-                        episode.title = title
-                        episode.summary = ep_data.get('summary', '')
+                title = ep_data.get('title', "Episode %s" % ep_num)
+                if ep_data.get('part_name'):
+                    title = "%s - %s" % (title, ep_data['part_name'])
 
-                        if ep_data.get('air_date'):
-                            try:
-                                episode.originally_available_at = Datetime.ParseDate(ep_data['air_date'])
-                            except:
-                                pass
+                episode.title = title
+                episode.summary = ep_data.get('summary', '')
 
-                        if ep_data.get('duration_minutes'):
-                            episode.duration = ep_data['duration_minutes'] * 60 * 1000
+                if ep_data.get('air_date'):
+                    try:
+                        episode.originally_available_at = Datetime.ParseDate(ep_data['air_date'])
+                    except:
+                        pass
 
-                        if ep_data.get('thumb_url'):
-                            try:
-                                episode.thumbs[ep_data['thumb_url']] = Proxy.Media(
-                                    HTTP.Request(ep_data['thumb_url']).content
-                                )
-                            except Exception as e:
-                                Log.Warn("[Sportarr-Legacy] Failed to fetch episode thumb: %s" % e)
+                if ep_data.get('duration_minutes'):
+                    episode.duration = ep_data['duration_minutes'] * 60 * 1000
 
-                        Log.Debug("[Sportarr-Legacy] Updated S%sE%s: %s" % (season_num, ep_num, title))
+                if ep_data.get('thumb_url'):
+                    try:
+                        episode.thumbs[ep_data['thumb_url']] = Proxy.Media(
+                            HTTP.Request(ep_data['thumb_url']).content
+                        )
+                    except Exception as e:
+                        Log.Warn("[Sportarr-Legacy] Failed to fetch episode thumb: %s" % e)
 
-        except Exception as e:
-            Log.Error("[Sportarr-Legacy] Episodes update error: %s" % str(e))
+                Log.Debug("[Sportarr-Legacy] Updated S%sE%s: %s" % (season_num, ep_num, title))
+
+            except Exception as e:
+                Log.Error("[Sportarr-Legacy] Episode match error S%sE%s: %s" % (season_num, ep_num, str(e)))

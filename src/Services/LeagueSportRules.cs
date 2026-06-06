@@ -17,9 +17,29 @@ public static class LeagueSportRules
         // for an MMA promotion is actually a weight class, used for event
         // tagging not event filtering).
         "Fighting", "Combat",
-        "Cycling", "Motorsport", "Golf", "Darts",
+        // "Racing" is the hub canonical name for what TheSportsDB calls
+        // "Motorsport" — same divergence as Combat/Fighting above. Both must
+        // classify as teamless: motorsport events never carry home/away teams,
+        // so without this a freshly added F1/MotoGP/Formula E league is treated
+        // as a team sport with no teams selected, left unmonitored, and never
+        // synced (the UI sits on "Syncing events..." forever). The frontend
+        // mirror already lists both spellings.
+        "Cycling", "Motorsport", "Racing", "Golf", "Darts",
         "Climbing", "Gambling", "Badminton", "Table Tennis", "Snooker"
     };
+
+    /// <summary>
+    /// True for motorsport leagues regardless of which sport spelling upstream
+    /// ships ("Motorsport" from TheSportsDB, "Racing" from the hub). Use this
+    /// for session-type filtering (Race / Qualifying / Practice) instead of
+    /// comparing against a single literal.
+    /// </summary>
+    public static bool IsMotorsport(string? sport)
+    {
+        if (string.IsNullOrEmpty(sport)) return false;
+        return sport.Equals("Motorsport", System.StringComparison.OrdinalIgnoreCase)
+            || sport.Equals("Racing", System.StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Returns true for sports/leagues that do not have meaningful home/away

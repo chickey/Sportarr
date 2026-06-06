@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Sportarr.Api.Data;
+using Sportarr.Api.Helpers;
 using Sportarr.Api.Models;
 
 namespace Sportarr.Api.Services;
@@ -19,6 +20,11 @@ public class FileWatcherService : BackgroundService
     private readonly ConcurrentDictionary<string, System.Threading.Timer> _debounceTimers = new();
     private readonly HashSet<string> _videoExtensions;
     private static readonly TimeSpan DebounceDelay = TimeSpan.FromSeconds(2);
+
+    // Configured recycle bin path, cached so per-event filtering doesn't hit the DB.
+    // Refreshed alongside the watcher list. The dot-folder rule in LibraryPathFilter
+    // already catches the default ".Recycle.Bin"; this also covers a non-dotted custom path.
+    private volatile string? _recycleBinPath;
 
     public FileWatcherService(
         IServiceProvider serviceProvider,
@@ -61,6 +67,7 @@ public class FileWatcherService : BackgroundService
         {
             using var scope = _serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<SportarrDbContext>();
+            _recycleBinPath = (await scope.ServiceProvider.GetRequiredService<ConfigService>().GetConfigAsync()).RecycleBin;
 
             var settings = await db.MediaManagementSettings.FirstOrDefaultAsync(cancellationToken);
             if (settings?.RootFolders == null || settings.RootFolders.Count == 0)
@@ -112,6 +119,7 @@ public class FileWatcherService : BackgroundService
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SportarrDbContext>();
+        _recycleBinPath = (await scope.ServiceProvider.GetRequiredService<ConfigService>().GetConfigAsync()).RecycleBin;
 
         var settings = await db.MediaManagementSettings.FirstOrDefaultAsync(cancellationToken);
         var configuredPaths = settings?.RootFolders?.Select(r => r.Path).ToHashSet(StringComparer.OrdinalIgnoreCase)
@@ -161,11 +169,40 @@ public class FileWatcherService : BackgroundService
     private void OnFileCreated(object sender, FileSystemEventArgs e)
     {
         if (!IsVideoFile(e.FullPath)) return;
+        // Ignore files appearing inside the recycle bin / dot / system folders. A file the
+        // app moved to the recycle bin must not be re-imported as a "new" library file.
+        if (IsExcluded(e.FullPath)) return;
+        // Ignore events produced by Sportarr's own moves (rename, renumber, import).
+        if (SelfMoveTracker.ShouldIgnore(e.FullPath)) return;
         DebouncedHandleNewFile(e.FullPath);
     }
 
     private void OnFileRenamed(object sender, RenamedEventArgs e)
     {
+        // Skip renames that are Sportarr's own work (renumber/rename/import). Reacting to
+        // them races our synchronous DB update and can duplicate or re-point records.
+        if (SelfMoveTracker.ShouldIgnore(e.FullPath) || SelfMoveTracker.ShouldIgnore(e.OldFullPath))
+            return;
+
+        // A move INTO the recycle bin (or any excluded folder) surfaces as a rename. Treat it
+        // as a deletion of the old (library) path, NOT as a rename that would re-point the
+        // tracked record into the recycle bin. This is the fix for event files ending up
+        // pointing at /data/.Recycle.Bin/...
+        if (IsExcluded(e.FullPath))
+        {
+            if (IsVideoFile(e.OldFullPath) && !IsExcluded(e.OldFullPath))
+                _ = HandleDeletedFileAsync(e.OldFullPath);
+            return;
+        }
+
+        // A move OUT of an excluded folder into the library is just a new file at the new path.
+        if (IsExcluded(e.OldFullPath))
+        {
+            if (IsVideoFile(e.FullPath))
+                DebouncedHandleNewFile(e.FullPath);
+            return;
+        }
+
         // Handle video-to-video renames by updating existing records in place
         if (IsVideoFile(e.OldFullPath) && IsVideoFile(e.FullPath))
         {
@@ -185,8 +222,12 @@ public class FileWatcherService : BackgroundService
     private void OnFileDeleted(object sender, FileSystemEventArgs e)
     {
         if (!IsVideoFile(e.FullPath)) return;
+        if (IsExcluded(e.FullPath)) return;
+        if (SelfMoveTracker.ShouldIgnore(e.FullPath)) return;
         _ = HandleDeletedFileAsync(e.FullPath);
     }
+
+    private bool IsExcluded(string path) => LibraryPathFilter.IsExcluded(path, _recycleBinPath);
 
     private void OnWatcherError(object sender, ErrorEventArgs e)
     {

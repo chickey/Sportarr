@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sportarr.Api.Data;
+using Sportarr.Api.Helpers;
 using Sportarr.Api.Models;
 using Sportarr.Api.Models.Requests;
 using Sportarr.Api.Services;
@@ -667,7 +668,7 @@ app.MapPut("/api/leagues/{id:int}", async (int id, JsonElement body, SportarrDbC
 
                 // Apply motorsport session type filter (only for F1 currently)
                 // Note: null = all sessions, "" = no sessions, "Race,Qualifying" = specific sessions
-                if (shouldMonitor && league.Sport == "Motorsport" && league.MonitoredSessionTypes != null)
+                if (shouldMonitor && LeagueSportRules.IsMotorsport(league.Sport) && league.MonitoredSessionTypes != null)
                 {
                     var isSessionMonitored = EventPartDetector.IsMotorsportSessionMonitored(evt.Title, league.Name, league.MonitoredSessionTypes);
                     logger.LogDebug("[LEAGUES] Event '{Title}': session type filter applied, monitored = {IsMonitored} (filter: '{Filter}')",
@@ -711,7 +712,7 @@ app.MapPut("/api/leagues/{id:int}", async (int id, JsonElement body, SportarrDbC
 
         // If session types changed for motorsports, recalculate episode numbers
         // This ensures episodes are numbered correctly when sessions are added/removed
-        if (sessionTypesChanged && league.Sport == "Motorsport")
+        if (sessionTypesChanged && LeagueSportRules.IsMotorsport(league.Sport))
         {
             logger.LogInformation("[LEAGUES] Session types changed - recalculating episode numbers for all seasons");
 
@@ -824,8 +825,9 @@ app.MapPost("/api/leagues/{id:int}/scan", async (int id, SportarrDbContext db, I
 
         try
         {
-            var files = Directory.EnumerateFiles(leaguePath, "*.*", SearchOption.AllDirectories)
-                .Where(f => videoExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()));
+            var files = LibraryPathFilter.FilterExcluded(
+                Directory.EnumerateFiles(leaguePath, "*.*", SearchOption.AllDirectories)
+                    .Where(f => videoExtensions.Contains(Path.GetExtension(f).ToLowerInvariant())));
 
             foreach (var filePath in files)
             {

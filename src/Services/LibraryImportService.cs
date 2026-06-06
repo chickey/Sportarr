@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Sportarr.Api.Data;
+using Sportarr.Api.Helpers;
 using Sportarr.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -70,8 +71,9 @@ public class LibraryImportService
             var settings = await GetMediaManagementSettingsAsync();
 
             var searchOption = includeSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-            var files = Directory.GetFiles(folderPath, "*.*", searchOption)
-                .Where(f => VideoExtensions.Contains(Path.GetExtension(f).ToLower()))
+            var files = LibraryPathFilter.FilterExcluded(
+                    Directory.GetFiles(folderPath, "*.*", searchOption)
+                        .Where(f => VideoExtensions.Contains(Path.GetExtension(f).ToLower())))
                 .ToList();
 
             result.TotalFiles = files.Count;
@@ -377,32 +379,55 @@ public class LibraryImportService
                         }
                         else
                         {
-                            // Create new EventFile record. User-supplied overrides
-                            // (from the FileMetadataEditor) take precedence over the
-                            // parser's guesses for Codec / Source / ReleaseGroup /
-                            // OriginalTitle / Languages / IndexerFlags.
-                            var eventFile = new EventFile
-                            {
-                                EventId = existingEvent.Id,
-                                FilePath = destinationPath,
-                                Size = sourceFileSize,
-                                Quality = request.Quality ?? _fileParser.BuildQualityString(parsedInfo),
-                                Codec = request.Codec ?? parsedInfo.VideoCodec,
-                                Source = request.Source ?? parsedInfo.Source,
-                                ReleaseGroup = request.ReleaseGroup ?? parsedInfo.ReleaseGroup,
-                                OriginalTitle = request.OriginalTitle,
-                                Languages = request.Languages ?? new List<string>(),
-                                IndexerFlags = request.IndexerFlags,
-                                PartName = partName,
-                                PartNumber = partNumber,
-                                Added = DateTime.UtcNow,
-                                LastVerified = DateTime.UtcNow,
-                                Exists = true
-                            };
-                            _db.EventFiles.Add(eventFile);
+                            // Guard against creating a second row for a path some record already
+                            // holds (the source path was checked above, but the destination path
+                            // can differ, and one file must map to exactly one EventFile row).
+                            // Without this, the import would create a duplicate episode.
+                            var existingByDest = await _db.EventFiles
+                                .FirstOrDefaultAsync(f => f.FilePath == destinationPath);
 
-                            _logger.LogInformation("Imported file to existing event: {EventTitle} -> {FilePath} (Part: {PartName})",
-                                existingEvent.Title, destinationPath, partName ?? "N/A");
+                            if (existingByDest != null)
+                            {
+                                existingByDest.EventId = existingEvent.Id;
+                                existingByDest.Size = sourceFileSize;
+                                existingByDest.Quality = request.Quality ?? _fileParser.BuildQualityString(parsedInfo);
+                                existingByDest.PartName = partName;
+                                existingByDest.PartNumber = partNumber;
+                                existingByDest.LastVerified = DateTime.UtcNow;
+                                existingByDest.Exists = true;
+
+                                _logger.LogInformation("Re-linked existing file record to event: {EventTitle} -> {FilePath} (Part: {PartName})",
+                                    existingEvent.Title, destinationPath, partName ?? "N/A");
+                            }
+                            else
+                            {
+                                // Create new EventFile record. User-supplied overrides
+                                // (from the FileMetadataEditor) take precedence over the
+                                // parser's guesses for Codec / Source / ReleaseGroup /
+                                // OriginalTitle / Languages / IndexerFlags.
+                                var eventFile = new EventFile
+                                {
+                                    EventId = existingEvent.Id,
+                                    FilePath = destinationPath,
+                                    Size = sourceFileSize,
+                                    Quality = request.Quality ?? _fileParser.BuildQualityString(parsedInfo),
+                                    Codec = request.Codec ?? parsedInfo.VideoCodec,
+                                    Source = request.Source ?? parsedInfo.Source,
+                                    ReleaseGroup = request.ReleaseGroup ?? parsedInfo.ReleaseGroup,
+                                    OriginalTitle = request.OriginalTitle,
+                                    Languages = request.Languages ?? new List<string>(),
+                                    IndexerFlags = request.IndexerFlags,
+                                    PartName = partName,
+                                    PartNumber = partNumber,
+                                    Added = DateTime.UtcNow,
+                                    LastVerified = DateTime.UtcNow,
+                                    Exists = true
+                                };
+                                _db.EventFiles.Add(eventFile);
+
+                                _logger.LogInformation("Imported file to existing event: {EventTitle} -> {FilePath} (Part: {PartName})",
+                                    existingEvent.Title, destinationPath, partName ?? "N/A");
+                            }
                         }
 
                         result.Imported.Add(destinationPath);
