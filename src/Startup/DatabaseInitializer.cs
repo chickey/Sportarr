@@ -996,6 +996,28 @@ public static class DatabaseInitializer
             Console.WriteLine($"[Sportarr] Warning: Could not verify Events.BroadcastDate column: {ex.Message}");
         }
 
+        // Ensure Events.AlternateName column exists.
+        // Legacy EnsureCreated() databases can have their migration history
+        // seeded before EF runs AddColumn migrations, which means newly added
+        // columns on Events would otherwise never land even though the
+        // migration appears applied. Calendar/Wanted queries materialize Event
+        // rows directly, so a missing column here surfaces as a 500.
+        try
+        {
+            var checkAltSql = "SELECT COUNT(*) FROM pragma_table_info('Events') WHERE name='AlternateName'";
+            var altExists = db.Database.SqlQueryRaw<int>(checkAltSql).AsEnumerable().FirstOrDefault();
+            if (altExists == 0)
+            {
+                Console.WriteLine("[Sportarr] Events.AlternateName column missing - adding it now...");
+                db.Database.ExecuteSqlRaw("ALTER TABLE \"Events\" ADD COLUMN \"AlternateName\" TEXT");
+                Console.WriteLine("[Sportarr] Events.AlternateName column added successfully");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Sportarr] Warning: Could not verify Events.AlternateName column: {ex.Message}");
+        }
+
         // Ensure AppSettings.IndexerMinimumAgeMinutes column exists.
         // Same EnsureCreated() seeding edge case as above.
         try
