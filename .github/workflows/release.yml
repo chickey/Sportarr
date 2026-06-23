@@ -487,7 +487,7 @@ jobs:
           category: trivy-image-${{ steps.bump_version.outputs.base_version }}
 
       - name: Send Discord notification
-        if: success()
+        if: ${{ success() && vars.DISCORD_NOTIFICATIONS_ENABLED != 'false' && env.WEBHOOK_URL != '' }}
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
           VERSION: ${{ steps.bump_version.outputs.version }}
