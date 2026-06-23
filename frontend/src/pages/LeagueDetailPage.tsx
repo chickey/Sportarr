@@ -1,6 +1,6 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftIcon, MagnifyingGlassIcon, ChevronDownIcon, ChevronRightIcon, UserIcon, ArrowPathIcon, UsersIcon, TrashIcon, FilmIcon, FolderOpenIcon, ExclamationTriangleIcon, SignalIcon, VideoCameraIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, MagnifyingGlassIcon, ChevronDownIcon, ChevronRightIcon, UserIcon, ArrowPathIcon, UsersIcon, TrashIcon, FilmIcon, FolderOpenIcon, ExclamationTriangleIcon, SignalIcon, VideoCameraIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
 import { CheckCircleIcon, CheckIcon } from '@heroicons/react/24/solid';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import apiClient from '../api/client';
@@ -9,6 +9,7 @@ import ManualSearchModal from '../components/ManualSearchModal';
 import SeasonSearchModal from '../components/SeasonSearchModal';
 import AddLeagueModal from '../components/AddLeagueModal';
 import EventFileDetailModal from '../components/EventFileDetailModal';
+import EventDetailsModal from '../components/EventDetailsModal';
 import LeagueFilesModal from '../components/LeagueFilesModal';
 import EventStatusBadge from '../components/EventStatusBadge';
 import ManualImportModal from '../components/ManualImportModal';
@@ -19,6 +20,7 @@ import { useCompactView } from '../hooks/useCompactView';
 import { formatDateInTimezone, formatEventDate } from '../utils/timezone';
 import { PAGE_PADDING, BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_INFO, BUTTON_DESTRUCTIVE } from '../utils/designTokens';
 import { isFightingSport, isTeamlessSport, usesFightingEventTypes } from '../utils/leagueSportRules';
+import type { Event } from '../types';
 
 // Type for the league prop passed to AddLeagueModal
 interface ModalLeagueData {
@@ -218,6 +220,7 @@ export default function LeagueDetailPage() {
     files: [],
     isFightingSport: false,
   });
+  const [selectedEventDetails, setSelectedEventDetails] = useState<Event | null>(null);
   const [leagueFilesModal, setLeagueFilesModal] = useState<{ isOpen: boolean; season?: string }>({
     isOpen: false,
   });
@@ -762,6 +765,14 @@ export default function LeagueDetailPage() {
     setTimeout(() => {
       editModalDataRef.current = null;
     }, 300);
+  };
+
+  const openEventDetails = (event: EventDetail) => {
+    setSelectedEventDetails(event as unknown as Event);
+  };
+
+  const closeEventDetails = () => {
+    setSelectedEventDetails(null);
   };
 
   // Helper to open delete confirmation with stable data
@@ -1990,30 +2001,38 @@ export default function LeagueDetailPage() {
                                       ~40 px minimum. Desktop keeps the
                                       dense p-1 hover-only style so the
                                       compact table layout doesn't grow. */}
-                                  {!hasParts && (
-                                    <div className="flex items-center justify-end gap-1.5 sm:gap-1 flex-shrink-0 sm:w-20">
-                                      <button
-                                        onClick={() => handleManualSearch(event.id, event.title, undefined, event.files)}
-                                        className="p-2 sm:p-1 bg-gray-700 sm:bg-transparent text-white sm:text-gray-400 hover:bg-gray-600 sm:hover:bg-gray-700 sm:hover:text-white rounded transition-colors"
-                                        title="Manual Search"
-                                      >
-                                        <UserIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleAutomaticSearch(event.id, event.title, event.qualityProfileId || league?.qualityProfileId)}
-                                        disabled={getSearchStatus(event.id) !== 'idle'}
-                                        className="p-2 sm:p-1 bg-red-600 sm:bg-transparent text-white sm:text-gray-400 hover:bg-red-700 sm:hover:bg-red-600/10 sm:hover:text-red-400 rounded transition-colors disabled:opacity-50"
-                                        title="Auto Search"
-                                      >
-                                        {getSearchStatus(event.id) !== 'idle' ? (
-                                          <ArrowPathIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5 animate-spin" />
-                                        ) : (
-                                          <MagnifyingGlassIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-                                        )}
-                                      </button>
-                                    </div>
-                                  )}
-                                  {hasParts && <div className="hidden sm:block sm:w-20 sm:flex-shrink-0" />}
+                                  <div className={`flex items-center justify-end gap-1.5 sm:gap-1 flex-shrink-0 ${hasParts ? 'sm:w-20' : 'sm:w-28'}`}>
+                                    <button
+                                      onClick={() => openEventDetails(event)}
+                                      className="p-2 sm:p-1 bg-gray-700 sm:bg-transparent text-white sm:text-gray-400 hover:bg-gray-600 sm:hover:bg-gray-700 sm:hover:text-white rounded transition-colors"
+                                      title="Event Details"
+                                    >
+                                      <PencilSquareIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                                    </button>
+                                    {!hasParts && (
+                                      <>
+                                        <button
+                                          onClick={() => handleManualSearch(event.id, event.title, undefined, event.files)}
+                                          className="p-2 sm:p-1 bg-gray-700 sm:bg-transparent text-white sm:text-gray-400 hover:bg-gray-600 sm:hover:bg-gray-700 sm:hover:text-white rounded transition-colors"
+                                          title="Manual Search"
+                                        >
+                                          <UserIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleAutomaticSearch(event.id, event.title, event.qualityProfileId || league?.qualityProfileId)}
+                                          disabled={getSearchStatus(event.id) !== 'idle'}
+                                          className="p-2 sm:p-1 bg-red-600 sm:bg-transparent text-white sm:text-gray-400 hover:bg-red-700 sm:hover:bg-red-600/10 sm:hover:text-red-400 rounded transition-colors disabled:opacity-50"
+                                          title="Auto Search"
+                                        >
+                                          {getSearchStatus(event.id) !== 'idle' ? (
+                                            <ArrowPathIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5 animate-spin" />
+                                          ) : (
+                                            <MagnifyingGlassIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                                          )}
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
 
                                 {/* Compact Multi-Part - Single horizontal row with all parts inline */}
@@ -2305,7 +2324,15 @@ export default function LeagueDetailPage() {
                       </div>{/* end flex-1 wrapper */}
 
                       {/* Event Actions */}
-                      <div className="flex flex-wrap items-center gap-2 md:gap-3 mt-3 md:mt-0 ml-7 md:ml-0 flex-shrink-0">
+                          <div className="flex flex-wrap items-center gap-2 md:gap-3 mt-3 md:mt-0 ml-7 md:ml-0 flex-shrink-0">
+                            <button
+                              onClick={() => openEventDetails(event)}
+                              className="px-2 md:px-4 py-1 md:py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs md:text-sm font-medium rounded transition-colors flex items-center gap-1 md:gap-2"
+                              title="Open event details and alias settings"
+                            >
+                              <PencilSquareIcon className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                              <span className="hidden sm:inline">Details</span>
+                            </button>
                             {/* Quality Profile Dropdown */}
                             <div className="flex-1 max-w-[150px] md:max-w-xs">
                               <select
@@ -2693,6 +2720,15 @@ export default function LeagueDetailPage() {
         editMode={true}
         leagueId={editModalDataRef.current?.leagueId || null}
       />
+
+      {/* Event Details Modal - used to edit alias and other event settings */}
+      {selectedEventDetails && (
+        <EventDetailsModal
+          isOpen={true}
+          onClose={closeEventDetails}
+          event={selectedEventDetails}
+        />
+      )}
 
       {/* Refresh Scope Modal - asks user whether to refresh current or all seasons */}
       <RefreshScopeModal
