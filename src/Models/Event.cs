@@ -18,6 +18,12 @@ public class CreateEventRequest
     public required string Title { get; set; }
 
     /// <summary>
+    /// Optional alias used for matching newly-created events against
+    /// release/file names that don't use the upstream title verbatim.
+    /// </summary>
+    public string? AlternateName { get; set; }
+
+    /// <summary>
     /// Sport type (e.g., "Soccer", "Fighting", "Basketball", "Baseball")
     /// </summary>
     public required string Sport { get; set; }
@@ -110,6 +116,15 @@ public class Event
 
     [JsonPropertyName("strEvent")]
     public required string Title { get; set; }
+
+    /// <summary>
+    /// Comma-separated alternate event names used for file/release
+    /// matching. Keeps the canonical upstream title intact while
+    /// allowing local aliases such as "Spanish Grand Prix" or
+    /// "Barcelona GP" to match files that use a different naming
+    /// convention. Mirrors League.AlternateName / Team.AlternateName.
+    /// </summary>
+    public string? AlternateName { get; set; }
 
     /// <summary>
     /// Sport type (e.g., "Soccer", "Fighting", "Basketball")
@@ -352,6 +367,29 @@ public class Event
     /// Files associated with this event (for multi-part episodes)
     /// </summary>
     public List<EventFile> Files { get; set; } = new();
+
+    /// <summary>
+    /// Canonical title plus any configured aliases, split on commas,
+    /// semicolons, pipes, or newlines. Used by matchers so the event can
+    /// be found under either its upstream name or a local alias.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public IEnumerable<string> GetSearchTitles()
+    {
+        yield return Title;
+
+        if (string.IsNullOrWhiteSpace(AlternateName))
+            yield break;
+
+        foreach (var alias in AlternateName.Split(new[] { ',', ';', '|', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!string.IsNullOrWhiteSpace(alias) &&
+                !alias.Equals(Title, StringComparison.OrdinalIgnoreCase))
+            {
+                yield return alias;
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -480,6 +518,7 @@ public class EventResponse
     public int Id { get; set; }
     public string? ExternalId { get; set; }
     public string Title { get; set; } = string.Empty;
+    public string? AlternateName { get; set; }
     public string Sport { get; set; } = string.Empty;
     public int? LeagueId { get; set; }
     public string? LeagueName { get; set; }
@@ -549,6 +588,7 @@ public class EventResponse
             Id = evt.Id,
             ExternalId = evt.ExternalId,
             Title = evt.Title,
+            AlternateName = evt.AlternateName,
             Sport = evt.Sport,
             LeagueId = evt.LeagueId,
             LeagueName = evt.League?.Name,

@@ -43,6 +43,7 @@ app.MapGet("/api/events/search", async (string? q, int? limit, int? excludeEvent
         var term = q.Trim();
         query = query.Where(e =>
             EF.Functions.Like(e.Title, $"%{term}%") ||
+            (!string.IsNullOrEmpty(e.AlternateName) && EF.Functions.Like(e.AlternateName, $"%{term}%")) ||
             (e.League != null && EF.Functions.Like(e.League.Name, $"%{term}%")));
     }
 
@@ -92,6 +93,7 @@ app.MapPost("/api/events", async (CreateEventRequest request, SportarrDbContext 
     {
         ExternalId = request.ExternalId,
         Title = request.Title,
+        AlternateName = request.AlternateName,
         Sport = request.Sport,           // Universal: Fighting, Soccer, Basketball, etc.
         LeagueId = request.LeagueId,     // Universal: UFC, Premier League, NBA
         HomeTeamId = request.HomeTeamId, // Team sports and combat sports
@@ -150,6 +152,13 @@ app.MapPut("/api/events/{id:int}", async (int id, JsonElement body, SportarrDbCo
     // Extract fields from request body (only update fields that are present)
     if (body.TryGetProperty("title", out var titleValue))
         evt.Title = titleValue.GetString() ?? evt.Title;
+
+    if (body.TryGetProperty("alternateName", out var alternateNameValue))
+    {
+        evt.AlternateName = alternateNameValue.ValueKind == JsonValueKind.Null
+            ? null
+            : alternateNameValue.GetString();
+    }
 
     if (body.TryGetProperty("sport", out var sportValue))
         evt.Sport = sportValue.GetString() ?? evt.Sport;

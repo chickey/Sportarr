@@ -90,6 +90,8 @@ export default function EventDetailsModal({ isOpen, onClose, event }: EventDetai
   const [qualityProfiles, setQualityProfiles] = useState<QualityProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<number | undefined>(event.qualityProfileId);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [alternateName, setAlternateName] = useState(event.alternateName ?? '');
+  const [isUpdatingAlias, setIsUpdatingAlias] = useState(false);
   const [partStatuses, setPartStatuses] = useState<PartStatus[]>(event.partStatuses || []);
   const [updatingPartName, setUpdatingPartName] = useState<string | null>(null);
 
@@ -135,6 +137,10 @@ export default function EventDetailsModal({ isOpen, onClose, event }: EventDetai
       fetchDvrStatus();
     }
   }, [isOpen, event.id]);
+
+  useEffect(() => {
+    setAlternateName(event.alternateName ?? '');
+  }, [event.id, event.alternateName]);
 
   // DVR actions
   const handleScheduleDvr = async () => {
@@ -337,6 +343,30 @@ export default function EventDetailsModal({ isOpen, onClose, event }: EventDetai
     }
   };
 
+  const handleAliasSave = async () => {
+    setIsUpdatingAlias(true);
+    try {
+      const response = await apiPut(`/api/events/${event.id}`, {
+        alternateName: alternateName.trim() || null,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update event alias');
+      }
+
+      const updatedEvent = await response.json();
+      setAlternateName(updatedEvent.alternateName ?? '');
+      toast.success('Event alias updated');
+    } catch (error) {
+      console.error('Failed to update event alias:', error);
+      toast.error('Update Failed', {
+        description: 'Failed to update event alias. Please try again.',
+      });
+    } finally {
+      setIsUpdatingAlias(false);
+    }
+  };
+
   const tabs = [
     { name: 'Details', icon: DocumentTextIcon },
     { name: 'Files', icon: FolderIcon },
@@ -518,6 +548,30 @@ export default function EventDetailsModal({ isOpen, onClose, event }: EventDetai
                                   </option>
                                 ))}
                               </select>
+                            </div>
+                            <div className="bg-gray-800/50 rounded-lg p-4 border border-red-900/20 col-span-2">
+                              <div className="flex items-center justify-between gap-3 mb-2">
+                                <p className="text-gray-400 text-sm">Event Alias</p>
+                                <span className="text-xs text-gray-500">Used for matching only</span>
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <input
+                                  value={alternateName}
+                                  onChange={(e) => setAlternateName(e.target.value)}
+                                  placeholder="Comma-separated alternate names"
+                                  className="flex-1 bg-gray-700 text-white rounded px-3 py-2 text-sm border border-gray-600 focus:border-red-500 focus:outline-none"
+                                />
+                                <button
+                                  onClick={handleAliasSave}
+                                  disabled={isUpdatingAlias}
+                                  className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white rounded transition-colors text-sm font-medium"
+                                >
+                                  {isUpdatingAlias ? 'Saving...' : 'Save'}
+                                </button>
+                              </div>
+                              <p className="text-gray-500 text-xs mt-2">
+                                Keep the original title, then add file-friendly names here to improve matching.
+                              </p>
                             </div>
                             <div className="bg-gray-800/50 rounded-lg p-4 border border-red-900/20">
                               <p className="text-gray-400 text-sm mb-1">Organization</p>
@@ -942,6 +996,12 @@ export default function EventDetailsModal({ isOpen, onClose, event }: EventDetai
                               <span className="text-gray-400 text-sm">Title:</span>
                               <span className="text-white text-sm">{event.title}</span>
                             </div>
+                            {alternateName && (
+                              <div className="flex justify-between gap-4">
+                                <span className="text-gray-400 text-sm">Alias:</span>
+                                <span className="text-white text-sm text-right">{alternateName}</span>
+                              </div>
+                            )}
                             <div className="flex justify-between">
                               <span className="text-gray-400 text-sm">Organization:</span>
                               <span className="text-white text-sm">{event.organization}</span>

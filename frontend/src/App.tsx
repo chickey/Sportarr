@@ -44,6 +44,7 @@ import IptvSettings from './pages/settings/IptvSettings';
 import IptvChannelsSettings from './pages/settings/IptvChannelsSettings';
 import DvrRecordingsSettings from './pages/settings/DvrRecordingsSettings';
 import DvrSchedulePage from './pages/iptv/DvrSchedulePage';
+import CatchupSettingsPage from './pages/iptv/CatchupSettingsPage';
 import TvGuidePage from './pages/iptv/TvGuidePage';
 import WatchChannelPage from './pages/iptv/WatchChannelPage';
 import IptvCoveragePage from './pages/iptv/IptvCoveragePage';
@@ -150,6 +151,7 @@ function App() {
             <Route path="iptv/watch/:channelId" element={<WatchChannelPage />} />
             <Route path="iptv/schedule" element={<Navigate to="/iptv/guide?scheduledOnly=true" replace />} />
             <Route path="iptv/recordings" element={<DvrRecordingsSettings />} />
+            <Route path="iptv/catchup" element={<CatchupSettingsPage />} />
             <Route path="iptv/coverage" element={<IptvCoveragePage />} />
 
             {/* Settings - each page manages its own showAdvanced state */}

@@ -43,6 +43,7 @@ interface AddEventModalProps {
     // Universal fields from Sportarr API
     externalId?: string; // Sportarr API event ID
     title: string;
+    alternateName?: string;
     sport?: string; // Sport type from Sportarr API (e.g., "Soccer", "Fighting", "Basketball")
     eventDate: string;
     broadcastDate?: string | null;
@@ -78,6 +79,7 @@ export default function AddEventModal({ isOpen, onClose, event, onSuccess }: Add
   const [monitored, setMonitored] = useState(true);
   const [qualityProfileId, setQualityProfileId] = useState<number | null>(null);
   const [searchOnAdd, setSearchOnAdd] = useState(true);
+  const [alternateName, setAlternateName] = useState(event.alternateName ?? '');
   const [isAdding, setIsAdding] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +92,10 @@ export default function AddEventModal({ isOpen, onClose, event, onSuccess }: Add
       }
     };
   }, []);
+
+  useEffect(() => {
+    setAlternateName(event.alternateName ?? '');
+  }, [event.alternateName, event.title]);
 
   // Get sport type from Sportarr API data
   // All events from Sportarr API (via Sportarr-API) should include sport field
@@ -167,6 +173,7 @@ export default function AddEventModal({ isOpen, onClose, event, onSuccess }: Add
         status: event.status,
         season: event.season,
         round: event.round,
+        alternateName: alternateName.trim() || undefined,
         // Universal: League and Teams for all sports
         leagueId: event.leagueId || event.league?.id,
         homeTeamId: event.homeTeamId || event.homeTeam?.id,
@@ -484,6 +491,23 @@ export default function AddEventModal({ isOpen, onClose, event, onSuccess }: Add
                         {/* Advanced Options */}
                         {showAdvanced && (
                           <div className="pt-2 space-y-4 border-t border-red-900/20">
+                            <div>
+                              <label htmlFor="alternateName" className="block text-white font-medium mb-2">
+                                Event Alias
+                              </label>
+                              <input
+                                id="alternateName"
+                                type="text"
+                                value={alternateName}
+                                onChange={(e) => setAlternateName(e.target.value)}
+                                placeholder="Comma-separated alternate names"
+                                className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-red-600 focus:ring-2 focus:ring-red-600/20 transition-all"
+                              />
+                              <p className="text-sm text-gray-400 mt-1">
+                                Keeps the original title but improves file matching.
+                              </p>
+                            </div>
+
                             <div className="flex items-start space-x-3">
                               <input
                                 type="checkbox"

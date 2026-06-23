@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   PlayIcon,
   StopIcon,
@@ -241,7 +242,7 @@ const defaultDvrSettings: DvrSettings = {
   reconnectDelaySeconds: 5,
   // Catchup
   useCatchupWhenAvailable: true,
-  catchupReadyGraceMinutes: 15,
+  catchupReadyGraceMinutes: 5,
   catchupTimeshiftMode: 'auto',
   catchupBackfillHours: 48,
   // Encoding settings
@@ -1583,67 +1584,20 @@ export default function DvrRecordingsSettings() {
                 </div>
               </div>
 
-              {/* Catchup Settings */}
-              <div className="mb-6">
-                <h4 className="text-lg font-semibold text-white mb-1">Catchup Recording</h4>
-                <p className="text-xs text-gray-500 mb-4">
-                  When a channel's provider keeps a catchup archive, finished events are downloaded
-                  from the archive after they air instead of being recorded live — no start/end
-                  guesswork, and missed events can still be grabbed while the archive retains them.
-                  Channels without an archive always record live.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="flex items-center">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={dvrSettings.useCatchupWhenAvailable}
-                        onChange={(e) => handleSettingsChange('useCatchupWhenAvailable', e.target.checked)}
-                        className="w-4 h-4 text-red-600 bg-gray-800 border-gray-700 rounded focus:ring-red-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-300">Use catchup when available</span>
-                    </label>
-                  </div>
+              <div className="mb-6 rounded-xl border border-cyan-900/30 bg-cyan-950/20 p-4">
+                <div className="flex items-start justify-between gap-4 flex-col md:flex-row md:items-center">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Ready Grace (minutes)</label>
-                    <input
-                      type="number"
-                      value={dvrSettings.catchupReadyGraceMinutes}
-                      onChange={(e) => handleSettingsChange('catchupReadyGraceMinutes', parseInt(e.target.value) || 0)}
-                      min="0"
-                      max="180"
-                      disabled={!dvrSettings.useCatchupWhenAvailable}
-                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-red-600 disabled:opacity-50"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Wait after the event ends before downloading</p>
+                    <h4 className="text-lg font-semibold text-white mb-1">Catchup downloads</h4>
+                    <p className="text-xs text-gray-400">
+                      Catchup settings now live in IPTV &gt; Catchup, so they can be managed separately from live DVR recordings.
+                    </p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Timeshift URL Style</label>
-                    <select
-                      value={dvrSettings.catchupTimeshiftMode}
-                      onChange={(e) => handleSettingsChange('catchupTimeshiftMode', e.target.value)}
-                      disabled={!dvrSettings.useCatchupWhenAvailable}
-                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-red-600 disabled:opacity-50"
-                    >
-                      <option value="auto">Auto-detect (recommended)</option>
-                      <option value="path">Path (most panels)</option>
-                      <option value="php">PHP (older panels)</option>
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">Auto tries both and remembers what your provider supports</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Backfill Window (hours)</label>
-                    <input
-                      type="number"
-                      value={dvrSettings.catchupBackfillHours}
-                      onChange={(e) => handleSettingsChange('catchupBackfillHours', parseInt(e.target.value) || 0)}
-                      min="0"
-                      max="336"
-                      disabled={!dvrSettings.useCatchupWhenAvailable}
-                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-red-600 disabled:opacity-50"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">How far back to grab missed events</p>
-                  </div>
+                  <Link
+                    to="/iptv/catchup"
+                    className="inline-flex items-center rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-500"
+                  >
+                    Open catchup settings
+                  </Link>
                 </div>
               </div>
 

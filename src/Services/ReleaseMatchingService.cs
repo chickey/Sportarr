@@ -207,14 +207,17 @@ public class ReleaseMatchingService
         SportsParseResult? preParsed = null,
         int? earlyReleaseLimitDays = null)
     {
+        var eventTitles = evt.GetSearchTitles().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var primaryEventTitle = eventTitles.FirstOrDefault() ?? evt.Title;
+
         var result = new ReleaseMatchResult
         {
             ReleaseName = release.Title,
-            EventTitle = evt.Title
+            EventTitle = primaryEventTitle
         };
 
         _logger.LogDebug("[Release Matching] Validating: '{Release}' against event '{Event}'",
-            release.Title, evt.Title);
+            release.Title, primaryEventTitle);
 
         // VALIDATION 0: Reject non-event content (press conferences, interviews, etc.)
         // This must be checked FIRST before any other validation
@@ -280,7 +283,8 @@ public class ReleaseMatchingService
 
         // Normalize titles for comparison (includes diacritic removal)
         var normalizedRelease = NormalizeTitle(release.Title);
-        var normalizedEvent = NormalizeTitle(evt.Title);
+        var normalizedEventTitles = eventTitles.Select(NormalizeTitle).ToList();
+        var normalizedEvent = normalizedEventTitles.FirstOrDefault() ?? NormalizeTitle(evt.Title);
 
         // Determine if this is a team sport event using string fields (always available, unlike navigation properties)
         var isTeamSport = !string.IsNullOrEmpty(evt.HomeTeamName) && !string.IsNullOrEmpty(evt.AwayTeamName);
@@ -292,8 +296,9 @@ public class ReleaseMatchingService
         // which can boost confidence for wrong team matchups
         if (!isTeamSport)
         {
-            var isLocationVariationMatch = SearchNormalizationService.IsReleaseMatch(release.Title, evt.Title);
-            if (isLocationVariationMatch && !normalizedRelease.Contains(normalizedEvent, StringComparison.OrdinalIgnoreCase))
+            var isLocationVariationMatch = eventTitles.Any(eventTitle => SearchNormalizationService.IsReleaseMatch(release.Title, eventTitle));
+            if (isLocationVariationMatch && !normalizedEventTitles.Any(eventTitle =>
+                    normalizedRelease.Contains(eventTitle, StringComparison.OrdinalIgnoreCase)))
             {
                 result.Confidence += 15;
                 result.MatchReasons.Add("Location/naming variation match");
@@ -328,7 +333,7 @@ public class ReleaseMatchingService
         // the same league family.
         if (isFighting)
         {
-            var leagueName = evt.League?.Name ?? evt.Title;
+            var leagueName = evt.League?.Name ?? primaryEventTitle;
             string? releaseSubcategory = null;
             string? eventSubcategory = null;
 
@@ -336,7 +341,7 @@ public class ReleaseMatchingService
                 leagueName.Contains("Ultimate Fighting", StringComparison.OrdinalIgnoreCase))
             {
                 var rt = EventPartDetector.DetectUfcEventType(release.Title);
-                var et = EventPartDetector.DetectUfcEventType(evt.Title);
+                var et = EventPartDetector.DetectUfcEventType(primaryEventTitle);
                 if (rt != EventPartDetector.UfcEventType.Other && et != EventPartDetector.UfcEventType.Other)
                 {
                     releaseSubcategory = $"UFC.{rt}";
@@ -348,7 +353,7 @@ public class ReleaseMatchingService
                      leagueName.Contains("Wrestling", StringComparison.OrdinalIgnoreCase))
             {
                 var rt = EventPartDetector.DetectWweEventType(release.Title);
-                var et = EventPartDetector.DetectWweEventType(evt.Title);
+                var et = EventPartDetector.DetectWweEventType(primaryEventTitle);
                 if (rt != EventPartDetector.WweEventType.Other && et != EventPartDetector.WweEventType.Other)
                 {
                     releaseSubcategory = $"WWE.{rt}";
@@ -360,7 +365,7 @@ public class ReleaseMatchingService
                      leagueName.Contains("ONE FC", StringComparison.OrdinalIgnoreCase))
             {
                 var rt = EventPartDetector.DetectOneEventType(release.Title);
-                var et = EventPartDetector.DetectOneEventType(evt.Title);
+                var et = EventPartDetector.DetectOneEventType(primaryEventTitle);
                 if (rt != EventPartDetector.OneEventType.Other && et != EventPartDetector.OneEventType.Other)
                 {
                     releaseSubcategory = $"ONE.{rt}";
@@ -399,7 +404,7 @@ public class ReleaseMatchingService
                 result.IsHardRejection = true;
                 result.Rejections.Add("Only one team name found - likely a different matchup");
                 _logger.LogDebug("[Release Matching] Hard rejection: only 1 of 2 teams found in '{Release}' for event '{Event}'",
-                    release.Title, evt.Title);
+                    release.Title, primaryEventTitle);
             }
             else
             {
@@ -537,7 +542,7 @@ public class ReleaseMatchingService
 
         if (isFightingSport)
         {
-            var detectedPart = _partDetector.DetectPart(release.Title, evt.Sport ?? "Fighting", evt.Title, evt.League?.Name);
+            var detectedPart = _partDetector.DetectPart(release.Title, evt.Sport ?? "Fighting", primaryEventTitle, evt.League?.Name);
 
             if (!enableMultiPartEpisodes)
             {
@@ -620,7 +625,7 @@ public class ReleaseMatchingService
             result.IsHardRejection = true;
             result.Rejections.Add($"Different sport detected in release: {differentSport}");
             _logger.LogDebug("[Release Matching] Hard rejection: different sport '{Sport}' detected in '{Release}' for event '{Event}'",
-                differentSport, release.Title, evt.Title);
+                differentSport, release.Title, primaryEventTitle);
             return result;
         }
 
@@ -631,7 +636,7 @@ public class ReleaseMatchingService
         if (isMotorsport)
         {
             // Detect session type from both event title and release filename
-            var eventSession = EventPartDetector.DetectMotorsportSessionType(evt.Title, evt.League?.Name ?? "");
+            var eventSession = EventPartDetector.DetectMotorsportSessionType(primaryEventTitle, evt.League?.Name ?? "");
             var releaseSession = EventPartDetector.DetectMotorsportSessionFromFilename(release.Title);
 
             _logger.LogDebug("[Release Matching] Motorsport session validation: event='{EventSession}', release='{ReleaseSession}'",
@@ -715,7 +720,9 @@ public class ReleaseMatchingService
         // containing a DIFFERENT known location (e.g., "Thailand")
         if (isMotorsport)
         {
-            var conflictingLocation = DetectConflictingLocation(release.Title, evt.Title);
+            var conflictingLocation = eventTitles
+                .Select(title => DetectConflictingLocation(release.Title, title))
+                .FirstOrDefault(x => x != null);
             if (conflictingLocation != null)
             {
                 result.Confidence -= 100;
@@ -762,7 +769,7 @@ public class ReleaseMatchingService
                     ? "Release is pre-season testing but event is a race weekend"
                     : "Release is a race weekend but event is pre-season testing");
                 _logger.LogDebug("[Release Matching] Hard rejection: pre-season testing vs race weekend mismatch: '{Release}' vs '{Event}'",
-                    release.Title, evt.Title);
+                    release.Title, primaryEventTitle);
             }
         }
 
@@ -821,7 +828,7 @@ public class ReleaseMatchingService
                 result.Rejections.Add(
                     "Insufficient evidence: release identified only by year/season-episode, which does not map to Sportarr's event numbering");
                 _logger.LogDebug("[Release Matching] Hard rejection: insufficient event-level evidence (year/SxxxxExx only) for '{Release}' -> '{Event}'",
-                    release.Title, evt.Title);
+                    release.Title, primaryEventTitle);
             }
         }
 
@@ -842,7 +849,7 @@ public class ReleaseMatchingService
         // deadlock). The per-grab summary upstream still logs which release
         // ultimately won at Info, which is the actually-meaningful event.
         _logger.LogDebug("[Release Matching] '{Release}' -> Event '{Event}': Confidence {Confidence}%, Match: {IsMatch}, Reasons: [{Reasons}], Rejections: [{Rejections}]",
-            release.Title, evt.Title, result.Confidence, result.IsMatch,
+            release.Title, primaryEventTitle, result.Confidence, result.IsMatch,
             string.Join(", ", result.MatchReasons),
             string.Join(", ", result.Rejections));
 
@@ -1389,7 +1396,9 @@ public class ReleaseMatchingService
         // We don't want to reject releases that match the event's own sport
         var eventSport = evt.Sport?.ToLowerInvariant() ?? "";
         var eventLeague = evt.League?.Name?.ToLowerInvariant() ?? "";
-        var eventTitle = evt.Title?.ToLowerInvariant() ?? "";
+        var eventTitles = evt.GetSearchTitles()
+            .Select(t => t.ToLowerInvariant())
+            .ToList();
 
         foreach (var (pattern, sport) in SportIdentifiers)
         {
@@ -1397,7 +1406,9 @@ public class ReleaseMatchingService
             {
                 // Check if this sport identifier is actually part of the event's own sport/league
                 var sportLower = sport.ToLowerInvariant();
-                if (eventSport.Contains(sportLower) || eventLeague.Contains(sportLower) || eventTitle.Contains(sportLower))
+                if (eventSport.Contains(sportLower) ||
+                    eventLeague.Contains(sportLower) ||
+                    eventTitles.Any(title => title.Contains(sportLower)))
                 {
                     // This sport identifier belongs to the event itself - not a mismatch
                     continue;

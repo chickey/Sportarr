@@ -175,7 +175,7 @@ public class LibraryImportService
                         foreach (var candidate in candidates)
                         {
                             var confidence = CalculateMatchConfidence(
-                                eventTitle, candidate.Title, organization, candidate,
+                                eventTitle, candidate, organization,
                                 eventDate, parsedYear, sportsResult.RoundNumber,
                                 sportsResult.SeasonYearEnd, explicitEpisodeNumber,
                                 sportsResult.Location);
@@ -1151,9 +1151,8 @@ public class LibraryImportService
     /// </summary>
     private int CalculateMatchConfidence(
         string searchTitle,
-        string eventTitle,
-        string? organization,
         Event evt,
+        string? organization,
         DateTime? parsedDate,
         int? parsedYear = null,
         int? parsedRoundNumber = null,
@@ -1162,6 +1161,8 @@ public class LibraryImportService
         string? parsedLocation = null)
     {
         int confidence = 0;
+        var eventTitles = evt.GetSearchTitles().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var primaryEventTitle = eventTitles.FirstOrDefault() ?? evt.Title;
 
         // ── ROUND NUMBER ────────────────────────────────────────────────────────
         // Round match = strong bonus. Mismatch = significant penalty (not rejection),
@@ -1173,14 +1174,14 @@ public class LibraryImportService
             if (evt.EpisodeNumber.Value == parsedRoundNumber.Value)
             {
                 confidence += 50;
-                _logger.LogDebug("[Match] Round {Round} matches EpisodeNumber for '{Event}'", parsedRoundNumber.Value, eventTitle);
+                _logger.LogDebug("[Match] Round {Round} matches EpisodeNumber for '{Event}'", parsedRoundNumber.Value, primaryEventTitle);
             }
             else if (evt.EpisodeNumber.Value <= 100)
             {
                 // Per-season numbering likely — penalise the mismatch
                 confidence -= 25;
                 _logger.LogDebug("[Match] Round mismatch: file round {FileRound} vs event episode {EventEp} for '{Event}' (penalising)",
-                    parsedRoundNumber.Value, evt.EpisodeNumber.Value, eventTitle);
+                    parsedRoundNumber.Value, evt.EpisodeNumber.Value, primaryEventTitle);
             }
             // If EpisodeNumber > 100 it's likely cumulative numbering — no penalty
         }
@@ -1217,7 +1218,7 @@ public class LibraryImportService
             if (!yearMatches)
             {
                 _logger.LogDebug("[Match] Year mismatch: file has {ParsedYear}, event '{Event}' is from {EventYear} (Season: {Season})",
-                    parsedYear.Value, eventTitle, eventYear, evt.Season);
+                    parsedYear.Value, primaryEventTitle, eventYear, evt.Season);
                 return 0;
             }
             else
@@ -1228,14 +1229,15 @@ public class LibraryImportService
 
         // ── TITLE SIMILARITY ────────────────────────────────────────────────────
         var normalizedSearch = NormalizeTitle(searchTitle);
-        var normalizedEvent = NormalizeTitle(eventTitle);
+        var normalizedEventTitles = eventTitles.Select(NormalizeTitle).ToList();
 
-        if (normalizedSearch.Equals(normalizedEvent, StringComparison.OrdinalIgnoreCase))
+        if (normalizedEventTitles.Any(normalizedEvent => normalizedSearch.Equals(normalizedEvent, StringComparison.OrdinalIgnoreCase)))
         {
             confidence += 60;
         }
-        else if (normalizedEvent.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                 normalizedSearch.Contains(normalizedEvent, StringComparison.OrdinalIgnoreCase))
+        else if (normalizedEventTitles.Any(normalizedEvent =>
+                     normalizedEvent.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                     normalizedSearch.Contains(normalizedEvent, StringComparison.OrdinalIgnoreCase)))
         {
             confidence += 40;
         }
@@ -1243,7 +1245,10 @@ public class LibraryImportService
         {
             // Partial word match — also check location against event title
             var searchWords = normalizedSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var eventWords = normalizedEvent.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var eventWords = normalizedEventTitles
+                .SelectMany(title => title.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
             // If we have a parsed location, include it in the word set for matching
             if (!string.IsNullOrEmpty(parsedLocation))

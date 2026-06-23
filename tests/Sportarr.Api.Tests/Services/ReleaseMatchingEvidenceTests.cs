@@ -94,4 +94,24 @@ public class ReleaseMatchingEvidenceTests
 
         result.Rejections.Should().NotContain(r => r.StartsWith("Insufficient evidence"));
     }
+
+    [Fact]
+    public void MotorsportEventAlias_MatchesReleaseUsingAliasName()
+    {
+        var evt = new Event
+        {
+            Id = 1,
+            Title = "Barcelona-Catalunya Grand Prix",
+            AlternateName = "Spanish Grand Prix, Barcelona GP",
+            Sport = "Motorsport",
+            EventDate = new DateTime(2026, 6, 14, 14, 0, 0, DateTimeKind.Utc),
+            League = new League { Id = 1, Name = "Formula 1", Sport = "Motorsport" }
+        };
+
+        var result = _svc.ValidateRelease(
+            Rel("Formula1.2026.Spanish.Grand.Prix.Race.2026.1080p.WEB-DL"), evt);
+
+        result.IsMatch.Should().BeTrue();
+        result.Confidence.Should().BeGreaterThanOrEqualTo(ReleaseMatchingService.MinimumMatchConfidence);
+    }
 }

@@ -1190,6 +1190,10 @@ namespace Sportarr.Api.Migrations
                         .HasColumnType("TEXT")
                         .HasAnnotation("Relational:JsonPropertyName", "strStatus");
 
+                    b.Property<string>("AlternateName")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(500)

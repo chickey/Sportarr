@@ -80,6 +80,7 @@ export default function Layout() {
         { label: 'Channels', path: '/iptv/channels' },
         { label: 'TV Guide', path: '/iptv/guide' },
         { label: 'Recordings', path: '/iptv/recordings' },
+        { label: 'Catchup', path: '/iptv/catchup' },
         { label: 'Coverage', path: '/iptv/coverage' },
       ],
     },

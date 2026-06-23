@@ -91,7 +91,7 @@ public class ImportMatchingService
         var scoredMatches = matches.Select(evt => new
         {
             Event = evt,
-            Score = CalculateMatchConfidence(eventTitle, evt.Title, detectedPart, evt, sportsResult)
+            Score = CalculateMatchConfidence(eventTitle, evt, detectedPart, sportsResult)
         }).OrderByDescending(m => m.Score).ToList();
 
         var bestMatch = scoredMatches.First();
@@ -148,7 +148,8 @@ public class ImportMatchingService
 
         // Strategy 1: Direct title match
         var titleMatches = await query
-            .Where(e => EF.Functions.Like(e.Title, $"%{cleanTitle}%"))
+            .Where(e => EF.Functions.Like(e.Title, $"%{cleanTitle}%") ||
+                        (!string.IsNullOrEmpty(e.AlternateName) && EF.Functions.Like(e.AlternateName, $"%{cleanTitle}%")))
             .OrderByDescending(e => e.EventDate)
             .Take(10)
             .ToListAsync();
@@ -248,22 +249,25 @@ public class ImportMatchingService
     /// <summary>
     /// Calculate confidence score (0-100) for how well a file matches an event
     /// </summary>
-    private int CalculateMatchConfidence(string searchTitle, string eventTitle, string? detectedPart, Event evt, SportsParseResult? sportsResult = null)
+    private int CalculateMatchConfidence(string searchTitle, Event evt, string? detectedPart, SportsParseResult? sportsResult = null)
     {
         int confidence = 0;
+        var eventTitles = evt.GetSearchTitles().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var primaryEventTitle = eventTitles.FirstOrDefault() ?? evt.Title;
 
         // Normalize titles for comparison
         var normalizedSearch = NormalizeTitle(searchTitle);
-        var normalizedEvent = NormalizeTitle(eventTitle);
+        var normalizedEventTitles = eventTitles.Select(NormalizeTitle).ToList();
 
         // Exact title match = 60 points
-        if (normalizedSearch.Equals(normalizedEvent, StringComparison.OrdinalIgnoreCase))
+        if (normalizedEventTitles.Any(normalizedEvent => normalizedSearch.Equals(normalizedEvent, StringComparison.OrdinalIgnoreCase)))
         {
             confidence += 60;
         }
         // Contains match = 40 points
-        else if (normalizedEvent.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                 normalizedSearch.Contains(normalizedEvent, StringComparison.OrdinalIgnoreCase))
+        else if (normalizedEventTitles.Any(normalizedEvent =>
+                     normalizedEvent.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                     normalizedSearch.Contains(normalizedEvent, StringComparison.OrdinalIgnoreCase)))
         {
             confidence += 40;
         }
@@ -271,7 +275,10 @@ public class ImportMatchingService
         else
         {
             var searchWords = normalizedSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var eventWords = normalizedEvent.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var eventWords = normalizedEventTitles
+                .SelectMany(title => title.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             var matchingWords = searchWords.Intersect(eventWords, StringComparer.OrdinalIgnoreCase).Count();
             var totalWords = Math.Max(searchWords.Length, eventWords.Length);
 
@@ -290,7 +297,7 @@ public class ImportMatchingService
             {
                 confidence -= 50;
                 _logger.LogDebug("[Import Matching] Sport mismatch penalty: parsed '{ParsedSport}' vs event '{EventSport}' for '{EventTitle}'",
-                    sportsResult.Sport, evt.Sport, evt.Title);
+                    sportsResult.Sport, evt.Sport, primaryEventTitle);
             }
         }
 
@@ -332,20 +339,20 @@ public class ImportMatchingService
         // compare against the event's title to disambiguate events sharing the same round number
         if (sportsResult != null && !string.IsNullOrEmpty(sportsResult.Session) && sportsResult.RoundNumber.HasValue)
         {
-            var eventSession = EventPartDetector.DetectMotorsportSessionType(evt.Title, evt.League?.Name ?? "");
+            var eventSession = EventPartDetector.DetectMotorsportSessionType(primaryEventTitle, evt.League?.Name ?? "");
             if (!string.IsNullOrEmpty(eventSession))
             {
                 if (eventSession.Equals(sportsResult.Session, StringComparison.OrdinalIgnoreCase))
                 {
                     confidence += 20; // Session matches — strong signal
                     _logger.LogDebug("[Import Matching] Session match boost: '{Session}' matches event '{EventTitle}'",
-                        sportsResult.Session, evt.Title);
+                        sportsResult.Session, primaryEventTitle);
                 }
                 else
                 {
                     confidence -= 100; // Session mismatch — hard reject (e.g., file is "Practice 1" but event is "Race")
                     _logger.LogDebug("[Import Matching] Session mismatch REJECT: parsed '{ParsedSession}' vs event '{EventSession}' for '{EventTitle}'",
-                        sportsResult.Session, eventSession, evt.Title);
+                        sportsResult.Session, eventSession, primaryEventTitle);
                 }
             }
             else
@@ -354,7 +361,7 @@ public class ImportMatchingService
                 // e.g., "Practice 1" file matching a generic "Grand Prix" event
                 confidence -= 30;
                 _logger.LogDebug("[Import Matching] File has session '{Session}' but event '{EventTitle}' has no session — penalizing",
-                    sportsResult.Session, evt.Title);
+                    sportsResult.Session, primaryEventTitle);
             }
         }
 
@@ -442,7 +449,7 @@ public class ImportMatchingService
 
         foreach (var evt in events)
         {
-            var confidence = CalculateMatchConfidence(parsed.EventTitle, evt.Title, null, evt);
+            var confidence = CalculateMatchConfidence(parsed.EventTitle, evt, null);
 
             suggestions.Add(new ImportSuggestion
             {

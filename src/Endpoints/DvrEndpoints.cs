@@ -481,6 +481,19 @@ app.MapGet("/api/dvr/settings", async (ConfigService configService) =>
     });
 });
 
+// Get dedicated catchup settings
+app.MapGet("/api/dvr/catchup-settings", async (ConfigService configService) =>
+{
+    var config = await configService.GetConfigAsync();
+    return Results.Ok(new
+    {
+        useCatchupWhenAvailable = config.DvrUseCatchupWhenAvailable,
+        catchupReadyGraceMinutes = config.DvrCatchupReadyGraceMinutes,
+        catchupTimeshiftMode = config.DvrCatchupTimeshiftMode,
+        catchupBackfillHours = config.DvrCatchupBackfillHours
+    });
+});
+
 // Update DVR settings
 app.MapPut("/api/dvr/settings", async (HttpRequest request, ConfigService configService) =>
 {
@@ -559,6 +572,36 @@ app.MapPut("/api/dvr/settings", async (HttpRequest request, ConfigService config
         config.DvrVideoBitrate = videoBitrate.GetInt32();
     if (settings.TryGetProperty("container", out var container))
         config.DvrContainer = container.GetString() ?? "mp4";
+
+    await configService.SaveConfigAsync(config);
+
+    return Results.Ok(new { success = true });
+});
+
+// Update dedicated catchup settings
+app.MapPut("/api/dvr/catchup-settings", async (HttpRequest request, ConfigService configService) =>
+{
+    using var reader = new StreamReader(request.Body);
+    var json = await reader.ReadToEndAsync();
+    var settings = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json);
+
+    var config = await configService.GetConfigAsync();
+
+    if (settings.TryGetProperty("useCatchupWhenAvailable", out var useCatchup))
+        config.DvrUseCatchupWhenAvailable = useCatchup.GetBoolean();
+    if (settings.TryGetProperty("catchupReadyGraceMinutes", out var catchupGrace))
+        config.DvrCatchupReadyGraceMinutes = catchupGrace.GetInt32();
+    if (settings.TryGetProperty("catchupTimeshiftMode", out var catchupModeJson))
+    {
+        var v = catchupModeJson.GetString();
+        config.DvrCatchupTimeshiftMode = v switch
+        {
+            "auto" or "path" or "php" => v!,
+            _ => "auto"
+        };
+    }
+    if (settings.TryGetProperty("catchupBackfillHours", out var catchupBackfill))
+        config.DvrCatchupBackfillHours = catchupBackfill.GetInt32();
 
     await configService.SaveConfigAsync(config);
 

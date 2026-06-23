@@ -2,6 +2,7 @@ export interface Event {
   id: number;
   externalId?: string; // Sportarr API event ID
   title: string;
+  alternateName?: string; // Comma-separated alternate event names for matching
   organization?: string; // Deprecated - use leagueId instead
   sport: string; // Sport type (e.g., "Soccer", "Fighting", "Basketball")
   leagueId?: number; // League/competition ID

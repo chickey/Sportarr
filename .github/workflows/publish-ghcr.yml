@@ -1,0 +1,98 @@
+name: Publish GHCR Image
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version info
+        id: version
+        run: |
+          CURRENT_VERSION=$(grep 'AppVersion =' src/Version.cs | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Copy Frontend to wwwroot
+        run: |
+          rm -rf src/wwwroot/assets src/wwwroot/index.html
+          mkdir -p src/wwwroot/assets
+          cp -r _output/UI/* src/wwwroot/
+
+      - name: Build Docker binaries
+        run: |
+          dotnet publish src/Sportarr.csproj -c Release -r linux-x64 --self-contained false -p:PublishSingleFile=false -p:SkipFrontendBuild=true -p:Version=${{ steps.version.outputs.version }} -o publish/docker-linux-x64
+          dotnet publish src/Sportarr.csproj -c Release -r linux-arm64 --self-contained false -p:PublishSingleFile=false -p:SkipFrontendBuild=true -p:Version=${{ steps.version.outputs.version }} -o publish/docker-linux-arm64
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/sportarr"
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "tags=${IMAGE}:latest,${IMAGE}:${{ steps.version.outputs.version }},${IMAGE}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=${IMAGE}:dev,${IMAGE}:${{ steps.version.outputs.version }},${IMAGE}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push GHCR image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            SPORTARR_BRANCH=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+        env:
+          BUILDX_NO_DEFAULT_ATTESTATIONS: 1

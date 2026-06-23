@@ -204,6 +204,15 @@ public class EventQueryService
         {
             // Fallback: use normalized event title
             queries.Add(NormalizeEventTitle(evt.Title));
+            foreach (var alias in GetEventTitleVariants(evt).Skip(1))
+            {
+                var normalizedAlias = NormalizeEventTitle(alias);
+                if (!string.IsNullOrWhiteSpace(normalizedAlias) &&
+                    !queries.Contains(normalizedAlias, StringComparer.OrdinalIgnoreCase))
+                {
+                    queries.Add(normalizedAlias);
+                }
+            }
             queryType = "Fallback";
             _logger.LogWarning("[EventQuery] Using fallback query for '{Title}' - Sport '{Sport}' / League '{League}' not recognized",
                 evt.Title, sport, leagueName ?? "(none)");
@@ -286,6 +295,19 @@ public class EventQueryService
             // No valid round — just series + year
             queries.Add($"{seriesPrefix} {year}");
         }
+
+        foreach (var alias in GetEventTitleVariants(evt).Skip(1))
+        {
+            var normalizedAlias = NormalizeEventTitle(alias);
+            if (!string.IsNullOrWhiteSpace(normalizedAlias))
+            {
+                var aliasQuery = $"{seriesPrefix} {year} {normalizedAlias}";
+                if (!queries.Contains(aliasQuery, StringComparer.OrdinalIgnoreCase))
+                {
+                    queries.Add(aliasQuery);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -359,6 +381,19 @@ public class EventQueryService
                 queries.Add($"{org} {eventName} {brandingYear}");
                 // Fallback: "WWE WrestleMania"
                 queries.Add($"{org} {eventName}");
+
+                foreach (var alias in GetEventTitleVariants(evt).Skip(1))
+                {
+                    var normalizedAlias = NormalizeEventTitle(alias);
+                    if (!string.IsNullOrWhiteSpace(normalizedAlias))
+                    {
+                        var aliasQuery = $"{org} {normalizedAlias} {brandingYear}";
+                        if (!queries.Contains(aliasQuery, StringComparer.OrdinalIgnoreCase))
+                        {
+                            queries.Add(aliasQuery);
+                        }
+                    }
+                }
             }
             else
             {
@@ -699,6 +734,11 @@ public class EventQueryService
             return "WRC";
 
         return leagueName.Replace(" ", "");
+    }
+
+    private IEnumerable<string> GetEventTitleVariants(Event evt)
+    {
+        return evt.GetSearchTitles().Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>

@@ -210,7 +210,7 @@ public class Config
     /// most recent footage available; a grace period avoids pulling a
     /// truncated tail and having to re-download.
     /// </summary>
-    public int DvrCatchupReadyGraceMinutes { get; set; } = 15;
+    public int DvrCatchupReadyGraceMinutes { get; set; } = 5;
 
     /// <summary>
     /// Timeshift URL style for catchup downloads. "auto" (default) tries

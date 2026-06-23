@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  sportarr:
+    image: ghcr.io/chickey/sportarr:latest
+    container_name: sportarr
+    restart: unless-stopped
+    ports:
+      - "1867:1867"
+    environment:
+      PUID: "99"
+      PGID: "100"
+      UMASK: "022"
+      TZ: "America/New_York"
+      Sportarr__DataPath: "/config"
+    volumes:
+      - sportarr_config:/config
+      - /path/to/your/sports:/data
+
+volumes:
+  sportarr_config:
