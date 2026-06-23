@@ -373,7 +373,6 @@ public class Event
     /// semicolons, pipes, or newlines. Used by matchers so the event can
     /// be found under either its upstream name or a local alias.
     /// </summary>
-    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
     public IEnumerable<string> GetSearchTitles()
     {
         yield return Title;
