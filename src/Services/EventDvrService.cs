@@ -168,6 +168,17 @@ public class EventDvrService
             && channel.HasArchive
             && sourceType == IptvSourceType.Xtream;
 
+        // If live recordings are disabled, future events should not be
+        // scheduled at all. Catchup still remains available for events
+        // that have already aired and are within the archive window.
+        if (!config.DvrEnableLiveRecordings && !isPastEvent)
+        {
+            _logger.LogDebug(
+                "[EventDVR] Live DVR is disabled; skipping future event {EventId} ('{Title}')",
+                eventId, evt.Title);
+            return null;
+        }
+
         // A past event can only be acquired from an archive. Without a
         // catchup-capable channel there is nothing to record from.
         if (isPastEvent && !useCatchup)

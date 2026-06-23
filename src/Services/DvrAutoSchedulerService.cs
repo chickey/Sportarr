@@ -80,7 +80,8 @@ public class DvrAutoSchedulerService : BackgroundService
         var config = await configService.GetConfigAsync();
 
         var now = DateTime.UtcNow;
-        var schedulingCutoff = now.Add(_schedulingWindow);
+        var liveRecordingsEnabled = config.DvrEnableLiveRecordings;
+        var schedulingCutoff = liveRecordingsEnabled ? now.Add(_schedulingWindow) : now;
 
         // Catchup backfill: events that ALREADY aired can still be
         // acquired from a provider archive, so look back a bounded window

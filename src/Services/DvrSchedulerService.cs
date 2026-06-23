@@ -10,14 +10,17 @@ public class DvrSchedulerService : BackgroundService
 {
     private readonly ILogger<DvrSchedulerService> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ConfigService _configService;
     private readonly TimeSpan _checkInterval = TimeSpan.FromSeconds(30);
 
     public DvrSchedulerService(
         ILogger<DvrSchedulerService> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ConfigService configService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _configService = configService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -46,35 +49,57 @@ public class DvrSchedulerService : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var dvrService = scope.ServiceProvider.GetRequiredService<DvrRecordingService>();
         var eventDvrService = scope.ServiceProvider.GetRequiredService<EventDvrService>();
+        var config = await _configService.GetConfigAsync();
+        var liveRecordingsEnabled = config.DvrEnableLiveRecordings;
 
-        // Start recordings that are due
-        var upcomingRecordings = await dvrService.GetUpcomingRecordingsAsync(minutesAhead: 2);
-
-        foreach (var recording in upcomingRecordings)
+        if (!liveRecordingsEnabled)
         {
-            if (stoppingToken.IsCancellationRequested)
-                break;
-
-            var effectiveStart = recording.ScheduledStart.AddMinutes(-recording.PrePadding);
-
-            if (DateTime.UtcNow >= effectiveStart)
+            var scheduledRecordings = await dvrService.GetRecordingsAsync(DvrRecordingStatus.Scheduled);
+            foreach (var recording in scheduledRecordings.Where(r => r.Method == DvrRecordingMethod.Live))
             {
-                _logger.LogInformation("[DVR Scheduler] Starting scheduled recording {Id}: {Title}",
+                _logger.LogInformation("[DVR Scheduler] Live DVR is disabled; cancelling scheduled recording {Id}: {Title}",
                     recording.Id, recording.Title);
-
                 try
                 {
-                    var result = await dvrService.StartRecordingAsync(recording.Id);
-
-                    if (!result.Success)
-                    {
-                        _logger.LogError("[DVR Scheduler] Failed to start recording {Id}: {Error}",
-                            recording.Id, result.Error);
-                    }
+                    await dvrService.CancelRecordingAsync(recording.Id);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "[DVR Scheduler] Exception starting recording {Id}", recording.Id);
+                    _logger.LogError(ex, "[DVR Scheduler] Failed to cancel live recording {Id}", recording.Id);
+                }
+            }
+        }
+        else
+        {
+            // Start recordings that are due
+            var upcomingRecordings = await dvrService.GetUpcomingRecordingsAsync(minutesAhead: 2);
+
+            foreach (var recording in upcomingRecordings)
+            {
+                if (stoppingToken.IsCancellationRequested)
+                    break;
+
+                var effectiveStart = recording.ScheduledStart.AddMinutes(-recording.PrePadding);
+
+                if (DateTime.UtcNow >= effectiveStart)
+                {
+                    _logger.LogInformation("[DVR Scheduler] Starting scheduled recording {Id}: {Title}",
+                        recording.Id, recording.Title);
+
+                    try
+                    {
+                        var result = await dvrService.StartRecordingAsync(recording.Id);
+
+                        if (!result.Success)
+                        {
+                            _logger.LogError("[DVR Scheduler] Failed to start recording {Id}: {Error}",
+                                recording.Id, result.Error);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[DVR Scheduler] Exception starting recording {Id}", recording.Id);
+                    }
                 }
             }
         }

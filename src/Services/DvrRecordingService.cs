@@ -110,6 +110,12 @@ public class DvrRecordingService
     /// </summary>
     public async Task<DvrRecording> ScheduleRecordingAsync(ScheduleDvrRecordingRequest request)
     {
+        var config = await _configService.GetConfigAsync();
+        if (request.Method != DvrRecordingMethod.Catchup && !config.DvrEnableLiveRecordings)
+        {
+            throw new InvalidOperationException("Live DVR recordings are disabled. Enable live recordings in IPTV > Recordings, or use IPTV > Catchup for post-air downloads.");
+        }
+
         var channel = await _db.IptvChannels
             .Include(c => c.Source)
             .FirstOrDefaultAsync(c => c.Id == request.ChannelId);

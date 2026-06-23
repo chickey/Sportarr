@@ -466,6 +466,7 @@ app.MapGet("/api/dvr/settings", async (ConfigService configService) =>
         enableReconnect = config.DvrEnableReconnect,
         maxReconnectAttempts = config.DvrMaxReconnectAttempts,
         reconnectDelaySeconds = config.DvrReconnectDelaySeconds,
+        enableLiveRecordings = config.DvrEnableLiveRecordings,
         // Catchup settings
         useCatchupWhenAvailable = config.DvrUseCatchupWhenAvailable,
         catchupReadyGraceMinutes = config.DvrCatchupReadyGraceMinutes,
@@ -540,6 +541,8 @@ app.MapPut("/api/dvr/settings", async (HttpRequest request, ConfigService config
         config.DvrMaxReconnectAttempts = maxReconnect.GetInt32();
     if (settings.TryGetProperty("reconnectDelaySeconds", out var reconnectDelay))
         config.DvrReconnectDelaySeconds = reconnectDelay.GetInt32();
+    if (settings.TryGetProperty("enableLiveRecordings", out var enableLiveRecordings))
+        config.DvrEnableLiveRecordings = enableLiveRecordings.GetBoolean();
 
     // Catchup settings
     if (settings.TryGetProperty("useCatchupWhenAvailable", out var useCatchup))

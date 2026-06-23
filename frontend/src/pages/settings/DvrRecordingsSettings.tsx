@@ -135,6 +135,7 @@ interface DvrSettings {
   enableReconnect: boolean;
   maxReconnectAttempts: number;
   reconnectDelaySeconds: number;
+  enableLiveRecordings: boolean;
   // Catchup: download finished events from the provider's timeshift
   // archive (channels with tv_archive) instead of recording live.
   useCatchupWhenAvailable: boolean;
@@ -240,6 +241,7 @@ const defaultDvrSettings: DvrSettings = {
   enableReconnect: true,
   maxReconnectAttempts: 5,
   reconnectDelaySeconds: 5,
+  enableLiveRecordings: true,
   // Catchup
   useCatchupWhenAvailable: true,
   catchupReadyGraceMinutes: 5,
@@ -1601,6 +1603,28 @@ export default function DvrRecordingsSettings() {
                 </div>
               </div>
 
+              <div className="mb-6 rounded-xl border border-red-900/30 bg-red-950/20 p-4">
+                <div className="flex items-start justify-between gap-4 flex-col md:flex-row md:items-center">
+                  <div>
+                    <h4 className="text-lg font-semibold text-white mb-1">Live DVR recordings</h4>
+                    <p className="text-xs text-gray-400">
+                      Turn this off to stop live IPTV recordings while leaving catchup downloads enabled.
+                    </p>
+                  </div>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={dvrSettings.enableLiveRecordings}
+                      onChange={(e) => handleSettingsChange('enableLiveRecordings', e.target.checked)}
+                      className="w-4 h-4 text-red-600 bg-gray-800 border-gray-700 rounded focus:ring-red-500"
+                    />
+                    <span className="ml-2 text-sm text-gray-300">
+                      {dvrSettings.enableLiveRecordings ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+
               {/* Save/Reset Buttons */}
               {settingsHasChanges && (
                 <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-800">
@@ -1652,12 +1676,19 @@ export default function DvrRecordingsSettings() {
               </button>
               <button
                 onClick={() => setShowScheduleModal(true)}
-                disabled={ffmpegAvailable === false}
+                disabled={ffmpegAvailable === false || !dvrSettings.enableLiveRecordings}
                 className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
-                  ffmpegAvailable !== false
+                  ffmpegAvailable !== false && dvrSettings.enableLiveRecordings
                     ? 'bg-red-600 hover:bg-red-700 text-white'
                     : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                 }`}
+                title={
+                  !dvrSettings.enableLiveRecordings
+                    ? 'Live DVR recordings are disabled'
+                    : ffmpegAvailable === false
+                      ? 'FFmpeg is unavailable'
+                      : 'Schedule a manual recording'
+                }
               >
                 <PlusIcon className="w-4 h-4 mr-2" />
                 Manual Recording
@@ -2155,14 +2186,14 @@ export default function DvrRecordingsSettings() {
                     setChannelSearch('');
                     setShowChannelDropdown(false);
                   }}
-                  disabled={!isFormValid()}
+                  disabled={!isFormValid() || !dvrSettings.enableLiveRecordings}
                   className={`px-6 py-3 rounded-lg transition-colors ${
-                    isFormValid()
+                    isFormValid() && dvrSettings.enableLiveRecordings
                       ? 'bg-red-600 hover:bg-red-700 text-white'
                       : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                   }`}
                 >
-                  Schedule Recording
+                  {dvrSettings.enableLiveRecordings ? 'Schedule Recording' : 'Live DVR Disabled'}
                 </button>
               </div>
             </div>

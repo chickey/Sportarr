@@ -173,6 +173,7 @@ public class Config
     public bool DvrEnableReconnect { get; set; } = true; // Enable stream reconnection on failures
     public int DvrMaxReconnectAttempts { get; set; } = 5; // Maximum reconnection attempts
     public int DvrReconnectDelaySeconds { get; set; } = 5; // Delay between reconnection attempts
+    public bool DvrEnableLiveRecordings { get; set; } = true; // Enable live IPTV recordings (catchup remains separate)
 
     /// <summary>
     /// What happens when scheduling a new recording would push an
