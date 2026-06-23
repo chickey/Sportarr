@@ -1,4 +1,4 @@
-name: Publish GHCR Image
+name: Publish Container Image to GHCR
 
 on:
   push:

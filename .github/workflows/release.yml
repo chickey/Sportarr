@@ -1,4 +1,4 @@
-name: Release and Build
+name: Release Artifacts and App Build
 
 on:
   push:
