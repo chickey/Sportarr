@@ -1603,28 +1603,6 @@ export default function DvrRecordingsSettings() {
                 </div>
               </div>
 
-              <div className="mb-6 rounded-xl border border-red-900/30 bg-red-950/20 p-4">
-                <div className="flex items-start justify-between gap-4 flex-col md:flex-row md:items-center">
-                  <div>
-                    <h4 className="text-lg font-semibold text-white mb-1">Live DVR recordings</h4>
-                    <p className="text-xs text-gray-400">
-                      Turn this off to stop live IPTV recordings while leaving catchup downloads enabled.
-                    </p>
-                  </div>
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={dvrSettings.enableLiveRecordings}
-                      onChange={(e) => handleSettingsChange('enableLiveRecordings', e.target.checked)}
-                      className="w-4 h-4 text-red-600 bg-gray-800 border-gray-700 rounded focus:ring-red-500"
-                    />
-                    <span className="ml-2 text-sm text-gray-300">
-                      {dvrSettings.enableLiveRecordings ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </label>
-                </div>
-              </div>
-
               {/* Save/Reset Buttons */}
               {settingsHasChanges && (
                 <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-800">

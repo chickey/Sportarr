@@ -13,6 +13,7 @@ import {
   BoltIcon,
   ClipboardDocumentIcon,
   LinkIcon,
+  CloudArrowDownIcon,
 } from '@heroicons/react/24/outline';
 import { toast } from 'sonner';
 import apiClient from '../../api/client';
@@ -247,6 +248,8 @@ export default function IptvSettings() {
   const [sources, setSources] = useState<IptvSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [liveDvrEnabled, setLiveDvrEnabled] = useState(true);
+  const [savingLiveDvr, setSavingLiveDvr] = useState(false);
 
   // Modal state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -280,6 +283,7 @@ export default function IptvSettings() {
   // Load sources on mount
   useEffect(() => {
     loadSources();
+    loadDvrMode();
   }, []);
 
   const loadSources = async () => {
@@ -291,6 +295,29 @@ export default function IptvSettings() {
       setError(err.message || 'Failed to load IPTV sources');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadDvrMode = async () => {
+    try {
+      const { data } = await apiClient.get<{ enableLiveRecordings: boolean }>('/dvr/settings');
+      setLiveDvrEnabled(data.enableLiveRecordings ?? true);
+    } catch (err) {
+      console.error('Failed to load live DVR mode:', err);
+    }
+  };
+
+  const handleLiveDvrToggle = async (enabled: boolean) => {
+    setSavingLiveDvr(true);
+    try {
+      await apiClient.put('/dvr/settings', { enableLiveRecordings: enabled });
+      setLiveDvrEnabled(enabled);
+      toast.success(enabled ? 'Live DVR enabled' : 'Live DVR disabled');
+    } catch (err) {
+      console.error('Failed to save live DVR mode:', err);
+      toast.error('Failed to update live DVR mode');
+    } finally {
+      setSavingLiveDvr(false);
     }
   };
 
@@ -686,6 +713,64 @@ export default function IptvSettings() {
           </button>
         </div>
       )}
+
+      <div className="mb-8 rounded-2xl border border-red-900/30 bg-gradient-to-br from-gray-950 via-slate-950 to-black p-6 shadow-2xl shadow-red-950/20">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20">
+                <CloudArrowDownIcon className="h-6 w-6 text-red-400" />
+              </span>
+              <div>
+                <h3 className="text-xl font-semibold text-white">DVR Modes</h3>
+                <p className="text-sm text-gray-400">
+                  Control whether Sportarr does live IPTV recordings or only catchup downloads.
+                </p>
+              </div>
+            </div>
+            <p className="text-sm leading-6 text-gray-300">
+              Live DVR records events in real time. Catchup downloads finished events from your provider's archive
+              after they air. You can turn live recordings off here and keep catchup enabled if you want a
+              download-only workflow.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 min-w-[280px]">
+            <label className="flex items-center justify-between gap-4 rounded-xl border border-gray-800 bg-gray-900 px-4 py-3">
+              <div>
+                <div className="text-sm font-medium text-white">Live DVR recordings</div>
+                <div className="text-xs text-gray-400">Turn live IPTV recordings on or off</div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-300">{liveDvrEnabled ? 'Enabled' : 'Disabled'}</span>
+                <input
+                  type="checkbox"
+                  checked={liveDvrEnabled}
+                  onChange={(e) => handleLiveDvrToggle(e.target.checked)}
+                  disabled={savingLiveDvr}
+                  className="h-5 w-5 rounded border-gray-600 bg-gray-800 text-red-500 focus:ring-red-500 disabled:opacity-50"
+                />
+              </div>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to="/iptv/recordings"
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm text-gray-200 transition-colors hover:border-gray-500 hover:bg-gray-800"
+              >
+                <PlayIcon className="h-4 w-4" />
+                Recordings
+              </Link>
+              <Link
+                to="/iptv/catchup"
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm text-gray-200 transition-colors hover:border-gray-500 hover:bg-gray-800"
+              >
+                <CloudArrowDownIcon className="h-4 w-4" />
+                Catchup
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
 
         {/* Info Box */}
         <div className="mb-8 rounded-lg border border-gray-800 bg-gray-900/70 p-6">
